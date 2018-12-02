@@ -147,7 +147,7 @@ plt.xlabel('label')
 
 count = 0
 for i in range(len(trainY2)):
-    if (trainPredict2_2[i] - trainY2[i]) / trainY2[i] * 100 <= 5:
+    if abs(trainPredict2_2[i] - trainY2[i]) / trainY2[i] * 100 <= 5:
         count += 1
 count = count / len(trainY2) * 100
 print(count)
@@ -166,7 +166,7 @@ plt.xlabel('label')
 
 count = 0
 for i in range(len(testY2)):
-    if (testPredict2_2[i] - testY2[i]) / testY2[i] * 100 <= 5:
+    if abs(testPredict2_2[i] - testY2[i]) / testY2[i] * 100 <= 5:
         count += 1
 count = count / len(testY2) * 100
 print(count)
