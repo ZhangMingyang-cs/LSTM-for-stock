@@ -69,7 +69,7 @@ xy_train = scaler.fit_transform(xy_train)
 xy_train = xy_train.reshape((-1, seq_length + 1, data_dim))
 
 xy_test = xy_test.reshape((-1, data_dim))
-xy_test = scaler.fit_transform(xy_test)
+xy_test = scaler.transform(xy_test)
 xy_test = xy_test.reshape((-1, seq_length + 1, data_dim))
 
 x_train = np.zeros((training_set_size, seq_length, data_dim))
