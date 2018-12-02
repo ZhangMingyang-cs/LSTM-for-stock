@@ -1,0 +1,11 @@
+import tushare as ts
+pro = ts.pro_api('f3bbc97d0ffbbed8666e6f7c82e712165950d048987f5d6cfbf1e0ce')
+#查询当前所有正常上市交易的上交所股票列表
+code_list = pro.stock_basic(exchange='SSE', list_status='L', fields='ts_code,symbol,name')
+print(code_list)
+
+
+for i in range(len(code_list)):
+    print(code_list.iloc[i,0])
+    data = pro.daily(ts_code=code_list.iloc[i,0], start_date='20180801', end_date='20180912')
+    data.to_excel('C:/Users/Administrator/Desktop/股票预测/数据2/' + code_list.iloc[i,0] + '.xlsx')
