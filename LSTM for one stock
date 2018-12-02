@@ -1,0 +1,203 @@
+# 导入包
+import tensorflow as tf
+import numpy as np
+import matplotlib.pyplot as plt
+import tushare as ts
+import pandas as pd
+from sklearn.preprocessing import MinMaxScaler
+
+#参数设置/parameter setting
+timesteps = seq_length = 20 #时间窗/window length
+data_dim = 7 #输入数据维度/dimension of input data
+output_dim = 1 #输出数据维度/dimension of output data
+
+#数据准备/data preparation 
+#变量选取Open,High,Low,Close,Volume等，以浦发银行股票为例
+pro = ts.pro_api('f3bbc97d0ffbbed8666e6f7c82e712165950d048987f5d6cfbf1e0ce') #token可以在新版tushare的网站上找到
+stock_data = pro.query('daily',ts_code = '600000.SH', start_date = '20000101', end_date = '20181120')
+stock_data = stock_data[::-1] #倒序，使日期靠前的排在前面
+stock_data.reset_index(drop=True, inplace=True) #把每行的索引改为“0、1、2……”
+xy = stock_data[['open','close','high','low','vol','pct_chg','amount']] #选取需要的features
+xy = np.array(xy.values) #转为array
+
+#切分训练集合测试集/split to train and testing
+train_size = int(len(xy) * 0.7) #训练集长度
+test_size = len(xy) - train_size #测试集长度
+xy_train, xy_test = np.array(xy[0:train_size]),np.array(xy[train_size:len(xy)]) #划分训练集、测试集
+
+scaler = MinMaxScaler()
+xy_train_new = scaler.fit_transform(xy_train) #预处理，按列操作，每列最小值为0，最大值为1
+x_new = xy_train_new[:,0:] #features
+y_new = xy_train_new[:,1] * 10 #labels，适当放大方便训练
+
+x = x_new
+y = y_new
+dataX = []
+dataY = []
+for i in range(0, len(y) - seq_length):
+    _x = x[i:i + seq_length]
+    _y = y[i + seq_length]  # Next close price
+    print(_x, "->", _y)
+    dataX.append(_x)
+    dataY.append(_y)
+
+#处理数据shape,准备进入神经网络层
+x_real = np.vstack(dataX).reshape(-1,seq_length,data_dim)
+y_real= np.vstack(dataY).reshape(-1,output_dim)
+print(x_real.shape)
+print(y_real.shape)
+dataX = x_real
+dataY = y_real
+
+trainX, trainY = dataX, dataY
+
+
+xy_test_new = scaler.transform(xy_test) #使用训练集的scaler预处理测试集的数据
+x_new = xy_test_new[:,0:]
+y_new = xy_test_new[:,1] * 10
+
+x = x_new
+y = y_new
+dataX = []
+dataY = []
+for i in range(0, len(y) - seq_length):
+    _x = x[i:i + seq_length]
+    _y = y[i + seq_length]  # Next price change
+    print(_x, "->", _y)
+    dataX.append(_x)
+    dataY.append(_y)
+
+#处理数据shape,准备进入神经网络层
+x_real = np.vstack(dataX).reshape(-1,seq_length,data_dim)
+y_real= np.vstack(dataY).reshape(-1,output_dim)
+print(x_real.shape)
+print(y_real.shape)
+dataX = x_real
+dataY = y_real
+
+testX, testY = dataX, dataY
+
+
+from keras.layers import Input, Dense, LSTM, Reshape
+from keras.models import Model
+from keras import regularizers
+
+# 构建神经网络层 1层Dense层+1层LSTM层+3层Dense层
+# 用于1个输入情况
+rnn_units = 10
+Dense_input = Input(shape=(seq_length, data_dim), name='dense_input') #输入层
+#shape: 形状元组（整型）不包括batch size。表示了预期的输入将是一批（seq_len,data_dim）的向量。
+Dense_output_1 = Dense(rnn_units, activation='relu', kernel_regularizer=regularizers.l2(0.01), name='dense1')(Dense_input) #全连接网络
+
+lstm_input = Reshape(target_shape=(seq_length, rnn_units), name='reshape2')(Dense_output_1) 
+#改变Tensor形状，改变后是（None，seq_length, rnn_units）
+lstm_output = LSTM(rnn_units, activation='tanh', dropout=1.0, name='lstm')(lstm_input) #LSTM网络
+#units: Positive integer,dimensionality of the output space.
+#dropout: Float between 0 and 1. Fraction of the units to drop for the linear transformation of the inputs.
+
+Dense_input_2 = Reshape(target_shape=(rnn_units,), name='reshape3')(lstm_output) 
+#改变Tensor形状，改变后是（None，rnn_units）
+Dense_output_2 = Dense(32, activation='relu', kernel_regularizer=regularizers.l2(0.01), name='dense2')(Dense_input_2) #全连接网络
+Dense_output_3 = Dense(16, activation='relu', kernel_regularizer=regularizers.l2(0.01), name='dense3')(Dense_output_2) #全连接网络
+predictions = Dense(output_dim, activation=None, kernel_regularizer=regularizers.l2(0.01), name='dense4')(Dense_output_3) #全连接网络
+
+model = Model(inputs=Dense_input, outputs=predictions)
+#This model will include all layers required in the computation of output given input.
+model.compile(optimizer='adam', loss='mse', metrics=['mae'])
+#Configures the model for training.
+#optimizer: String (name of optimizer) or optimizer instance. See optimizers.
+#loss: String (name of objective function) or objective function.The loss value will be minimized by the model.
+#metrics: List of metrics to be evaluated by the model during training and testing. Typically you will use  metrics=['accuracy'].
+history = model.fit(trainX, trainY, batch_size=256, epochs=100, verbose=2, validation_split=0.1)
+#Trains the model for a given number of epochs (iterations on a dataset).
+#verbose: Integer. 0, 1, or 2. Verbosity mode. 0 = silent, 1 = progress bar, 2 = one line per epoch.
+
+
+# Plot training & validation loss values
+plt.plot(history.history['loss'])
+plt.plot(history.history['val_loss'])
+plt.title('Model loss')
+plt.ylabel('Loss')
+plt.xlabel('Epoch')
+plt.legend(['Train', 'Test'], loc='upper left')
+plt.show()
+
+
+trainPredict2 = model.predict(trainX) #查看训练结果
+trainPredict2_2 = trainPredict2 / 10 * scaler.data_range_[1] + scaler.data_min_[1] #放大和scale的逆运算
+trainY2 = trainY / 10 * scaler.data_range_[1] + scaler.data_min_[1] #放大和scale的逆运算
+#下面画出收盘价走势
+fig, ax = plt.subplots(figsize=(16, 6))
+ax.plot(trainY2,color='blue')
+ax.plot(trainPredict2_2,color='orange')
+
+
+print(np.mean((trainPredict2_2 - trainY2) / trainY2 * 100)) #平均误差（%）
+print(np.max((trainPredict2_2 - trainY2) / trainY2 * 100)) #最大误差（%）
+print(np.min((trainPredict2_2 - trainY2) / trainY2 * 100)) #最小误差（%）
+
+
+#计算误差小于4%的比例
+count = 0
+for i in range(len(trainY2)):
+    if (trainPredict2_2[i] - trainY2[i]) / trainY2[i] * 100 <= 4: 
+        count += 1
+count = count / len(trainY2) * 100
+print(count)
+
+
+testPredict2 = model.predict(testX) #查看测试结果
+testPredict2_2 = testPredict2 / 10 * scaler.data_range_[1] + scaler.data_min_[1] #放大和scale的逆运算
+testY2 = testY / 10 * scaler.data_range_[1] + scaler.data_min_[1] #放大和scale的逆运算
+#下面画出收盘价走势
+fig, ax = plt.subplots(figsize=(16, 6))
+ax.plot(testY2,color='blue')
+ax.plot(testPredict2_2,color='orange')
+
+
+print(np.mean((testPredict2_2 - testY2) / testY2 * 100)) #平均误差（%）
+print(np.max((testPredict2_2 - testY2) / testY2 * 100)) #最大误差（%）
+print(np.min((testPredict2_2 - testY2) / testY2 * 100)) #最小误差（%）
+
+
+#计算误差小于4%的比例
+count = 0
+for i in range(len(testY2)):
+    if (testPredict2_2[i] - testY2[i]) / testY2[i] * 100 <= 4:
+        count += 1
+count = count / len(testY2) * 100
+print(count)
+
+
+#计算对转折点的预测正确率
+correct = np.zeros(len(testPredict2_2))
+for i in range(1, len(testPredict2_2)):
+    if np.sign(testPredict2_2[i] - testPredict2_2[i-1]) == np.sign(testY2[i] - testY2[i-1]): #如果对涨或跌的判断准确，这里用正负符号判断
+        correct[i] = 1 #就加1
+accuracy = np.sum(correct) / len(correct) * 100
+print(accuracy)
+
+
+#如果对明天的预测价格高于今天的收盘价，就买进并持有一天，计算能挣多少钱
+count = 0
+for i in range(1, len(testPredict2_2)):
+    if testPredict2_2[i] >= testY2[i-1]:
+        count = count + (testY2[i] - testY2[i-1])
+print(count)
+
+
+#最理想的状况下，能挣多少钱
+count = 0
+for i in range(1, len(testPredict2_2)):
+    if testY2[i] >= testY2[i-1]:
+        count = count + (testY2[i] - testY2[i-1])
+print(count)
+
+
+# 保存模型
+model.save('Dense_LSTM_Dense.h5')   # HDF5文件，pip install h5py
+
+# 载入模型
+from keras.models import load_model
+model = load_model('sequance_model.h5')
+
