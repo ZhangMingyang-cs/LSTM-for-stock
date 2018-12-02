@@ -55,7 +55,7 @@ from sklearn.preprocessing import MinMaxScaler
 training_set_size = int(raw_data.shape[0] * 0.7)
 test_set_size = raw_data.shape[0] - training_set_size
 
-#np.random.shuffle(raw_data)
+np.random.shuffle(raw_data)
 xy_train = raw_data[:training_set_size]
 xy_test = raw_data[training_set_size:]
 
