@@ -199,5 +199,4 @@ model.save('Dense_LSTM_Dense.h5')   # HDF5文件，pip install h5py
 
 # 载入模型
 from keras.models import load_model
-model = load_model('sequance_model.h5')
-
+model = load_model('Dense_LSTM_Dense.h5')
